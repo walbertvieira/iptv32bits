@@ -1,0 +1,66 @@
+name: Gerar IPTV Player (Windows 32 e 64 bits)
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86
+            vlc: win32
+            label: 32bits
+          - arch: x64
+            vlc: win64
+            label: 64bits
+    name: Windows ${{ matrix.label }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: ${{ matrix.arch }}
+
+      - name: Dependências
+        run: |
+          python -c "import struct, sys; print('Python', sys.version, struct.calcsize('P') * 8, 'bits')"
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt "pyinstaller>=6.10,<7"
+
+      - name: Baixar VLC portátil (${{ matrix.vlc }})
+        run: ./preparar_vlc.ps1 -Arch ${{ matrix.vlc }}
+
+      - name: Autoteste (código-fonte)
+        run: python main.py --selftest "$PWD/selftest-fonte.log"
+
+      - name: Gerar executável
+        run: python -m PyInstaller --noconfirm --clean --windowed --name "IPTV Player" main.py
+
+      - name: Embutir VLC e arquivos
+        run: |
+          Copy-Item vlc "dist/IPTV Player/vlc" -Recurse
+          Copy-Item LEIA-ME.md, exemplo.m3u "dist/IPTV Player/"
+
+      - name: Autoteste (programa empacotado)
+        run: |
+          $p = Start-Process -FilePath "dist/IPTV Player/IPTV Player.exe" -ArgumentList "--selftest", "`"$PWD/selftest-exe.log`"" -Wait -PassThru
+          if (Test-Path selftest-exe.log) { Get-Content selftest-exe.log }
+          if ($p.ExitCode -ne 0) { throw "Autoteste do programa empacotado falhou (código $($p.ExitCode))" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: IPTV-Player-${{ matrix.label }}
+          path: dist/
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: autoteste-${{ matrix.label }}
+          path: selftest-*.log
+          if-no-files-found: ignore
