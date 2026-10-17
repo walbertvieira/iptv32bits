@@ -1,0 +1,4 @@
+# Edição 32 bits: Qt 5.15 (o Qt 6/PySide6 não existe para Windows 32 bits)
+PyQt5==5.15.11
+PyQt5-Qt5==5.15.2
+python-vlc>=3.0.20123
